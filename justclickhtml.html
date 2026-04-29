@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LangGraph AI Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar for a polished look */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #4B5563; border-radius: 10px; }
+        
+        /* Smooth fade-in animation for messages */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .message-anim { animation: fadeIn 0.3s ease-out forwards; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 h-screen flex flex-col font-sans">
+
+    <header class="bg-gray-800 border-b border-gray-700 p-4 flex items-center justify-between shadow-md z-10">
+        <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center font-bold shadow-lg">AI</div>
+            <div>
+                <h1 class="font-semibold text-lg">Agentic Assistant</h1>
+                <p class="text-xs text-green-400 flex items-center">
+                    <span class="w-2 h-2 bg-green-400 rounded-full mr-1 inline-block"></span> Online
+                </p>
+            </div>
+        </div>
+        <div class="text-xs text-gray-400 bg-gray-700 px-3 py-1 rounded-full">
+            Session ID: <span id="session-id">abc-123</span>
+        </div>
+    </header>
+
+    <main id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-6 flex flex-col">
+        <div class="flex flex-col space-y-2 max-w-[80%] self-start message-anim">
+            <div class="bg-gray-800 border border-gray-700 p-4 rounded-2xl rounded-tl-sm text-sm shadow-sm leading-relaxed text-gray-200">
+                Hello! I am your LangGraph assistant. I can help execute tasks, but I might pause to ask for your permission before doing anything sensitive.
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-gray-800 border-t border-gray-700 p-4">
+        <form id="chat-form" class="max-w-4xl mx-auto relative flex items-center">
+            <input 
+                type="text" 
+                id="user-input" 
+                class="w-full bg-gray-700 border border-gray-600 rounded-full pl-4 pr-12 py-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder-gray-400"
+                placeholder="Message the assistant..."
+                autocomplete="off"
+            >
+            <button 
+                type="submit" 
+                class="absolute right-2 top-1/2 transform -translate-y-1/2 bg-blue-600 hover:bg-blue-500 text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
+                id="send-btn"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform rotate-90" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                </svg>
+            </button>
+        </form>
+        <div class="text-center text-xs text-gray-500 mt-2">
+            LLMs can make mistakes. Consider verifying important information.
+        </div>
+    </footer>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const chatForm = document.getElementById('chat-form');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        
+        // Mock Session ID for LangGraph Thread Memory
+        const threadId = "thread-" + Math.random().toString(36).substr(2, 9);
+        document.getElementById('session-id').innerText = threadId;
+
+        // Auto-scroll to bottom
+        function scrollToBottom() {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // Add a message to the UI
+        function appendMessage(role, text, isActionRequired = false) {
+            const wrapper = document.createElement('div');
+            wrapper.className = `flex flex-col space-y-2 max-w-[80%] message-anim ${role === 'user' ? 'self-end' : 'self-start'}`;
+
+            const bubble = document.createElement('div');
+            if (role === 'user') {
+                bubble.className = "bg-blue-600 text-white p-4 rounded-2xl rounded-tr-sm text-sm shadow-md leading-relaxed";
+            } else {
+                bubble.className = "bg-gray-800 border border-gray-700 p-4 rounded-2xl rounded-tl-sm text-sm shadow-sm leading-relaxed text-gray-200";
+            }
+            bubble.textContent = text;
+            wrapper.appendChild(bubble);
+
+            // LangGraph Human-in-the-Loop UI
+            if (isActionRequired) {
+                const actionDiv = document.createElement('div');
+                actionDiv.className = "flex space-x-2 mt-2";
+                actionDiv.innerHTML = `
+                    <button onclick="handleHitl('approve', this)" class="px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-xs font-semibold rounded-lg transition-colors">Approve Action</button>
+                    <button onclick="handleHitl('reject', this)" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded-lg transition-colors">Reject Action</button>
+                `;
+                wrapper.appendChild(actionDiv);
+            }
+
+            chatContainer.appendChild(wrapper);
+            scrollToBottom();
+        }
+
+        // Add a temporary "Typing..." indicator
+        function showTypingIndicator() {
+            const wrapper = document.createElement('div');
+            wrapper.id = 'typing-indicator';
+            wrapper.className = 'flex flex-col space-y-2 max-w-[80%] self-start message-anim';
+            wrapper.innerHTML = `
+                <div class="bg-gray-800 border border-gray-700 p-4 rounded-2xl rounded-tl-sm flex items-center space-x-2">
+                    <div class="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
+                    <div class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                    <div class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                </div>
+            `;
+            chatContainer.appendChild(wrapper);
+            scrollToBottom();
+        }
+
+        function removeTypingIndicator() {
+            const indicator = document.getElementById('typing-indicator');
+            if (indicator) indicator.remove();
+        }
+
+        // Handle Human-in-the-Loop clicks
+        function handleHitl(action, btnElement) {
+            // Remove buttons after clicking to prevent double submission
+            const buttonContainer = btnElement.parentElement;
+            buttonContainer.innerHTML = `<span class="text-xs text-gray-400 italic">Action ${action}d by user.</span>`;
+            
+            appendMessage('user', `I ${action} the action.`);
+            showTypingIndicator();
+
+            // TODO: Send this decision to your LangGraph backend
+            /*
+            fetch('http://localhost:8000/resume', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ thread_id: threadId, action: action })
+            })
+            */
+
+            // Mock backend response after approval
+            setTimeout(() => {
+                removeTypingIndicator();
+                appendMessage('bot', `Understood. I have ${action === 'approve' ? 'executed' : 'cancelled'} the task successfully.`);
+            }, 1500);
+        }
+
+        // Handle Form Submission
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            // 1. Show user message
+            appendMessage('user', text);
+            userInput.value = '';
+            sendBtn.disabled = true;
+
+            // 2. Show typing indicator
+            showTypingIndicator();
+
+            // 3. TODO: Connect to your actual LangGraph API here
+            /*
+            try {
+                const response = await fetch('http://localhost:8000/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ thread_id: threadId, message: text })
+                });
+                const data = await response.json();
+                
+                removeTypingIndicator();
+                // Check if LangGraph paused the graph for HITL
+                if (data.status === 'requires_action') {
+                    appendMessage('bot', data.reply, true); // true triggers the buttons
+                } else {
+                    appendMessage('bot', data.reply);
+                }
+            } catch (error) { ... }
+            */
+
+            // Mock Backend Interaction for demonstration
+            setTimeout(() => {
+                removeTypingIndicator();
+                
+                // Simulate LangGraph returning a "Human in the loop" state
+                if (text.toLowerCase().includes('delete') || text.toLowerCase().includes('execute')) {
+                    appendMessage('bot', "I am about to execute a sensitive tool. Do you approve this action?", true);
+                } else {
+                    appendMessage('bot', "I received your message! If you ask me to 'delete' or 'execute' something, I will trigger the Human-in-the-Loop workflow.");
+                }
+                
+                sendBtn.disabled = false;
+                userInput.focus();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
